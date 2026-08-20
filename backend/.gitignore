@@ -1,0 +1,26 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Database (Never commit local development databases)
+*.sqlite3
+
+# Secrets and configuration
+.env
+*.env
+secrets.json
+
+# Media and Static files (Uploads should not go to Git)
+/media/
+/staticfiles/
+
+# OS files
+.DS_Store
+Thumbs.db
