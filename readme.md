@@ -8,9 +8,8 @@ python manage.py makemigrations
 python manage.py migrate
 python manage.py runserver
 ```
-
-```bash
 # To run the frontend
+```bash
 cd frontend
 npm install 
 npm run dev
