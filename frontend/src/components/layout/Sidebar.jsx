@@ -1,4 +1,3 @@
-import React from "react";
 import { LayoutDashboard, CreditCard, PieChart, Settings } from "lucide-react";
 
 export function Sidebar() {

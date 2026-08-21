@@ -1,7 +1,7 @@
 import { MoreVertical } from "lucide-react";
 import { subscriptions } from "../lib/mock-data";
 
-export default function SubscriptionsTable() {
+export function SubscriptionsTable() {
   return (
     <div className="bg-white rounded-3xl border border-slate-100 p-8 shadow-sm shrink-0 mb-8">
       <div className="flex justify-between items-center mb-6">

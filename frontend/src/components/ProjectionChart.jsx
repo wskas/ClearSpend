@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import { projectionData } from "../lib/mock-data";
 
-export default function ProjectionChart() {
+export function ProjectionChart() {
   return (
     <div className="bg-white flex-1 min-h-[400px] rounded-3xl shadow-sm border border-slate-100 p-8 flex flex-col shrink-0">
       <div className="flex justify-between items-end mb-8">

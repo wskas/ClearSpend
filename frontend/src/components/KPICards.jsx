@@ -1,4 +1,4 @@
-export default function KPICards() {
+export function KPICards() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 shrink-0">
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
