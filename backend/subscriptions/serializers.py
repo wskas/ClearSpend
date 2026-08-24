@@ -69,14 +69,20 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     category = serializers.PrimaryKeyRelatedField(
         queryset=Category.objects.none(), required=False, allow_null=True
     )
+    next_renewal_date = serializers.SerializerMethodField()
 
     class Meta:
         model = Subscription
         fields = [
             'id', 'name', 'amount', 'original_currency', 'category',
             'billing_cycle', 'custom_interval_days', 'is_active',
+            'start_date', 'next_renewal_date',
         ]
-        read_only_fields = ['id', 'is_active']
+        read_only_fields = ['id', 'is_active', 'next_renewal_date']
+
+    def get_next_renewal_date(self, obj):
+        renewal = obj.get_next_renewal_date()
+        return renewal.isoformat() if renewal else None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -1,35 +1,92 @@
-import { LayoutDashboard, CreditCard, PieChart, Settings } from "lucide-react";
+import { Moon, Sun, LogOut } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { NAV } from "../../constants/nav.js";
+import { clearTokens } from "../../lib/auth.js";
 
-export function Sidebar() {
+export default function Sidebar({ t, dark, setDark, tab, setTab }) {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    clearTokens();
+    navigate("/login", { replace: true });
+  };
+
   return (
-    <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col">
-      <div className="p-8 flex items-center gap-3">
-        <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shrink-0">
-          <div className="w-4 h-4 border-2 border-white rounded-sm rotate-45"></div>
+    <aside
+      className="hidden md:flex flex-col justify-between shrink-0"
+      style={{ width: 232, background: t.sidebar, borderRight: `1px solid ${t.border}` }}
+    >
+      <div>
+        <div className="flex items-center gap-2 px-5 pt-6 pb-2">
+          <div
+            className="flex items-center justify-center rounded-lg cs-num"
+            style={{ width: 30, height: 30, background: t.primary, color: "#fff", fontWeight: 800, fontSize: 14 }}
+          >
+            C
+          </div>
+          <span className="cs-num font-bold text-[15px]">ClearSpend</span>
         </div>
-        <span className="font-bold text-xl tracking-tight">ClearSpend</span>
+
+        <div className="px-5 pt-6 pb-2 text-[11px] font-semibold tracking-wide uppercase" style={{ color: t.textFaint }}>
+          Menu
+        </div>
+        <nav className="px-3 flex flex-col gap-0.5">
+          {NAV.map((item) => {
+            const Icon = item.icon;
+            const isActive = tab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setTab(item.id)}
+                className="cs-tap flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13.5px] font-medium text-left"
+                style={{ background: isActive ? t.primary : "transparent", color: isActive ? "#fff" : t.textMuted }}
+              >
+                <Icon size={17} strokeWidth={2} />
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* <div className="px-5 pt-7 pb-2 text-[11px] font-semibold tracking-wide uppercase" style={{ color: t.textFaint }}>
+          Help
+        </div>
+        <div className="px-3 flex flex-col gap-0.5">
+          <div className="flex items-center gap-3 px-3 py-2.5 text-[13.5px] font-medium" style={{ color: t.textMuted }}>
+            Feedback
+          </div>
+          <div className="flex items-center gap-3 px-3 py-2.5 text-[13.5px] font-medium" style={{ color: t.textMuted }}>
+            Help Center
+          </div>
+        </div> */}
       </div>
-      
-      <nav className="flex-1 px-4 space-y-1">
-        <a href="#" className="flex items-center gap-3 px-4 py-3 bg-indigo-50 text-indigo-700 rounded-xl font-medium">
-          <LayoutDashboard className="w-5 h-5" /> Dashboard
-        </a>
-        <a href="#" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl font-medium">
-          <CreditCard className="w-5 h-5" /> Subscriptions
-        </a>
-        <a href="#" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl font-medium">
-          <PieChart className="w-5 h-5" /> Analytics
-        </a>
-        <a href="#" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl font-medium">
-          <Settings className="w-5 h-5" /> Settings
-        </a>
-      </nav>
-      
-      <div className="p-6 bg-slate-50 m-4 rounded-2xl">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Saving Goal</p>
-        <p className="text-sm text-slate-600 mb-3">You saved <span className="text-indigo-600 font-bold">$42.00</span> this month by cancelling unused subs.</p>
-        <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-          <div className="bg-indigo-500 h-full w-[65%]"></div>
+
+      <div style={{ borderTop: `1px solid ${t.border}` }}>
+        <div className="px-3 pt-3">
+          <button
+            onClick={handleLogout}
+            className="cs-tap flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13.5px] font-medium text-left w-full"
+            style={{ color: t.textMuted }}
+          >
+            <LogOut size={17} strokeWidth={2} />
+            Log out
+          </button>
+        </div>
+
+        <div className="px-5 py-5 flex items-center justify-between">
+          <span className="flex items-center gap-2 text-[13px] font-medium" style={{ color: t.textMuted }}>
+            {dark ? <Moon size={15} /> : <Sun size={15} />} Dark mode
+          </span>
+          <button
+            onClick={() => setDark((d) => !d)}
+            className="cs-tap relative rounded-full"
+            style={{ width: 38, height: 21, background: dark ? t.primary : "#DADEEB" }}
+          >
+            <span
+              className="absolute rounded-full bg-white"
+              style={{ width: 15, height: 15, top: 3, left: dark ? 20 : 3, transition: "left .15s ease" }}
+            />
+          </button>
         </div>
       </div>
     </aside>
