@@ -25,9 +25,11 @@ export default function SubscriptionsPage({ t, subs, statusFilter, setStatusFilt
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <div className="text-[15px] font-bold">All Subscriptions</div>
-          <div className="text-[12px]" style={{ color: t.textMuted }}>
-            {search && ` — filtered by "${search}"`}
-          </div>
+          {search && (
+            <div className="text-[12px]" style={{ color: t.textMuted }}>
+              Filtered by "{search}"
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <div className="flex rounded-lg p-0.5" style={{ background: t.cardAlt, border: `1px solid ${t.border}` }}>
@@ -35,7 +37,7 @@ export default function SubscriptionsPage({ t, subs, statusFilter, setStatusFilt
               <button
                 key={f}
                 onClick={() => setStatusFilter(f)}
-                className="cs-tap rounded-md px-3 py-1.5 text-[12px] font-semibold capitalize"
+                className="rounded-md px-3 py-1.5 text-[12px] font-semibold capitalize"
                 style={{ background: statusFilter === f ? t.primary : "transparent", color: statusFilter === f ? "#fff" : t.textMuted }}
               >
                 {f}
@@ -44,7 +46,7 @@ export default function SubscriptionsPage({ t, subs, statusFilter, setStatusFilt
           </div>
           <button
             onClick={() => setEditing(null)}
-            className="cs-tap flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
             style={{ background: t.primary }}
           >
             <Plus size={14} /> Add

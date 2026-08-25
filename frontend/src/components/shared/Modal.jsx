@@ -16,7 +16,7 @@ export default function Modal({ t, title, onClose, children }) {
       >
         <div className="flex items-center justify-between mb-4">
           <div className="text-[16px] font-bold">{title}</div>
-          <button onClick={onClose} className="cs-tap">
+          <button onClick={onClose}>
             <X size={16} style={{ color: t.textMuted }} />
           </button>
         </div>

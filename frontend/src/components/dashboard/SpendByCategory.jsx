@@ -1,4 +1,3 @@
-import { CATEGORY_META } from "../../constants/categories.js";
 
 export default function SpendByCategory({ t, categoryTotals }) {
   return (
@@ -9,10 +8,10 @@ export default function SpendByCategory({ t, categoryTotals }) {
           <div key={c.name}>
             <div className="flex justify-between text-[11.5px] mb-1">
               <span style={{ color: t.textMuted }}>{c.name}</span>
-              <span className="font-semibold cs-num">{c.pct.toFixed(0)}%</span>
+              <span className="font-semibold">{c.pct.toFixed(0)}%</span>
             </div>
             <div className="rounded-full overflow-hidden" style={{ height: 6, background: t.cardAlt }}>
-              <div style={{ width: `${c.pct}%`, height: "100%", background: c.color || CATEGORY_META[c.name]?.color, borderRadius: 999 }} />
+              <div style={{ width: `${c.pct}%`, height: "100%", background: c.color, borderRadius: 999 }} />
             </div>
           </div>
         ))}

@@ -90,7 +90,7 @@ export function SubmitButton({ children, disabled }) {
     <button
       type="submit"
       disabled={disabled}
-      className="cs-tap w-full mt-2 rounded-lg py-2.5 text-[13.5px] font-semibold"
+      className="w-full mt-2 rounded-lg py-2.5 text-[13.5px] font-semibold"
       style={{ background: t.primary, color: "#fff", opacity: disabled ? 0.6 : 1 }}
     >
       {children}

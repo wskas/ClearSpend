@@ -11,7 +11,7 @@ export default function MonthlySpendCard({ t, monthlyTotal, onAddSubscription })
   return (
     <Card t={t}>
       <CardHeader t={t} label="Monthly Spend" tooltip="Normalized to USD across all active subscriptions" pill="Aug" />
-      <div className="cs-num text-[30px] font-extrabold mt-1">{fmtMoney(monthlyTotal)}</div>
+      <div className="text-[30px] font-extrabold mt-1">{fmtMoney(monthlyTotal)}</div>
       <div className="flex items-center gap-2 mt-2">
         <button
           onClick={() => {
@@ -19,7 +19,7 @@ export default function MonthlySpendCard({ t, monthlyTotal, onAddSubscription })
             setCopied(true);
             setTimeout(() => setCopied(false), 1200);
           }}
-          className="cs-tap flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium"
+          className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium"
           style={{ border: `1px solid ${t.border}`, color: t.textMuted }}
         >
           {copied ? <Check size={12} /> : <Copy size={12} />} {baseCurrency} base
@@ -29,10 +29,10 @@ export default function MonthlySpendCard({ t, monthlyTotal, onAddSubscription })
         </span>
       </div>
       <div className="flex gap-2 mt-4">
-        <button onClick={onAddSubscription} className="cs-tap flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-[13px] font-semibold text-white" style={{ background: t.primary }}>
+        <button onClick={onAddSubscription} className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-[13px] font-semibold text-white" style={{ background: t.primary }}>
           <Plus size={14} /> Add subscription
         </button>
-        <button className="cs-tap flex items-center justify-center rounded-lg px-3" style={{ border: `1px solid ${t.border}` }}>
+        <button className="flex items-center justify-center rounded-lg px-3" style={{ border: `1px solid ${t.border}` }}>
           <RefreshCcw size={14} style={{ color: t.textMuted }} />
         </button>
       </div>

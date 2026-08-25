@@ -39,7 +39,7 @@ export default function ProjectionChart({ t, horizon, setHorizon, categoryTotals
             <button
               key={h}
               onClick={() => setHorizon(h)}
-              className="cs-tap rounded-md px-3 py-1.5 text-[12px] font-semibold"
+              className="rounded-md px-3 py-1.5 text-[12px] font-semibold"
               style={{ background: horizon === h ? t.primary : "transparent", color: horizon === h ? "#fff" : t.textMuted }}
             >
               {h}mo

@@ -12,16 +12,16 @@ export default function CategoryCard({ t, category, count, value, pct, onEdit, o
         <span className="rounded-full" style={{ width: 12, height: 12, background: color }} />
         <div className="flex items-center gap-1.5">
           <span className="text-[11px] font-semibold" style={{ color: t.textMuted }}>{count} sub{count !== 1 ? "s" : ""}</span>
-          <button onClick={onEdit} title="Edit" className="cs-tap flex items-center justify-center rounded-md" style={{ width: 26, height: 26, border: `1px solid ${t.border}`, color: t.textMuted }}>
+          <button onClick={onEdit} title="Edit" className="flex items-center justify-center rounded-md" style={{ width: 26, height: 26, border: `1px solid ${t.border}`, color: t.textMuted }}>
             <Pencil size={12} />
           </button>
-          <button onClick={onDelete} title="Delete" className="cs-tap flex items-center justify-center rounded-md" style={{ width: 26, height: 26, border: `1px solid ${t.border}`, color: t.red }}>
+          <button onClick={onDelete} title="Delete" className="flex items-center justify-center rounded-md" style={{ width: 26, height: 26, border: `1px solid ${t.border}`, color: t.red }}>
             <Trash2 size={12} />
           </button>
         </div>
       </div>
       <div className="text-[15px] font-bold mt-3">{name}</div>
-      <div className="cs-num text-[22px] font-extrabold mt-1">
+      <div className="text-[22px] font-extrabold mt-1">
         {fmtMoney(value)}<span className="text-[12px] font-medium" style={{ color: t.textMuted }}>/mo</span>
       </div>
       <div className="rounded-full overflow-hidden mt-3" style={{ height: 6, background: t.cardAlt }}>

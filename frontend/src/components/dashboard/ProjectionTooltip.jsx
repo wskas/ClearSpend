@@ -11,7 +11,7 @@ export default function ProjectionTooltip({ active, payload, label, t }) {
           <span className="flex items-center gap-1.5" style={{ color: t.textMuted }}>
             <span className="rounded-full" style={{ width: 7, height: 7, background: p.fill }} /> {p.dataKey}
           </span>
-          <span className="font-semibold cs-num">{fmtMoney(p.value)}</span>
+          <span className="font-semibold">{fmtMoney(p.value)}</span>
         </div>
       ))}
     </div>

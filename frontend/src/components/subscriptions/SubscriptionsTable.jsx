@@ -1,5 +1,4 @@
 import { Pencil, Trash2 } from "lucide-react";
-import { CATEGORY_META } from "../../constants/categories.js";
 import { fmtMoney, monthlyNormalized } from "../../utils/currency.js";
 import { initials } from "../../utils/dates.js";
 
@@ -7,7 +6,7 @@ export default function SubscriptionsTable({ t, subs, compact, onEdit, onDelete 
   const showActions = !compact && onEdit && onDelete;
   const colCount = 5 + (compact ? 0 : 1) + (showActions ? 1 : 0);
   return (
-    <div className="overflow-x-auto cs-scroll">
+    <div className="overflow-x-auto">
       <table className="w-full text-left border-collapse">
         <thead>
           <tr style={{ borderBottom: `1px solid ${t.border}` }}>
@@ -25,13 +24,13 @@ export default function SubscriptionsTable({ t, subs, compact, onEdit, onDelete 
             <tr><td colSpan={colCount} className="py-6 text-center text-[12.5px]" style={{ color: t.textFaint }}>No subscriptions match this filter.</td></tr>
           )}
           {subs.map((s) => {
-            const color = s.color || CATEGORY_META[s.category]?.color;
+            const color = s.color;
             return (
-            <tr key={s.id} className="cs-row" style={{ borderBottom: `1px solid ${t.border}` }}>
+            <tr key={s.id} style={{ borderBottom: `1px solid ${t.border}` }}>
               <td className="py-2.5 pr-3">
                 <div className="flex items-center gap-2.5">
                   <div
-                    className="rounded-lg flex items-center justify-center cs-num font-bold text-[10.5px] flex-shrink-0"
+                    className="rounded-lg flex items-center justify-center font-bold text-[10.5px] flex-shrink-0"
                     style={{ width: 30, height: 30, background: color + "22", color }}
                   >
                     {initials(s.name)}
@@ -59,7 +58,7 @@ export default function SubscriptionsTable({ t, subs, compact, onEdit, onDelete 
                   </span>
                 </td>
               )}
-              <td className="py-2.5 text-right cs-num text-[13px] font-semibold" style={{ color: t.red }}>
+              <td className="py-2.5 text-right text-[13px] font-semibold" style={{ color: t.red }}>
                 −{fmtMoney(monthlyNormalized(s))}
               </td>
               {showActions && (
@@ -68,7 +67,7 @@ export default function SubscriptionsTable({ t, subs, compact, onEdit, onDelete 
                     <button
                       onClick={() => onEdit(s)}
                       title="Edit"
-                      className="cs-tap flex items-center justify-center rounded-md"
+                      className="flex items-center justify-center rounded-md"
                       style={{ width: 28, height: 28, border: `1px solid ${t.border}`, color: t.textMuted }}
                     >
                       <Pencil size={13} />
@@ -76,7 +75,7 @@ export default function SubscriptionsTable({ t, subs, compact, onEdit, onDelete 
                     <button
                       onClick={() => onDelete(s)}
                       title="Delete"
-                      className="cs-tap flex items-center justify-center rounded-md"
+                      className="flex items-center justify-center rounded-md"
                       style={{ width: 28, height: 28, border: `1px solid ${t.border}`, color: t.red }}
                     >
                       <Trash2 size={13} />

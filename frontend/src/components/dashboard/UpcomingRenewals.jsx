@@ -1,4 +1,3 @@
-import { CATEGORY_META } from "../../constants/categories.js";
 import { fmtMoney, monthlyNormalized } from "../../utils/currency.js";
 import { daysUntil, initials } from "../../utils/dates.js";
 
@@ -8,14 +7,14 @@ export default function UpcomingRenewals({ t, upcomingSorted, selectedRenewal, s
       <div className="flex items-center justify-between">
         <div className="text-[14px] font-bold">Upcoming Renewals</div>
       </div>
-      <div className="flex items-center gap-2.5 mt-4 overflow-x-auto cs-scroll p-1">
+      <div className="flex items-center gap-2.5 mt-4 overflow-x-auto p-1">
         {upcomingSorted.map((s) => {
-          const color = s.color || CATEGORY_META[s.category]?.color;
+          const color = s.color;
           return (
           <button
             key={s.id}
             onClick={() => setSelectedRenewal(s)}
-            className="cs-tap rounded-full flex items-center justify-center cs-num font-bold text-[11px] flex-shrink-0"
+            className="rounded-full flex items-center justify-center font-bold text-[11px] flex-shrink-0"
             title={`${s.name} · ${daysUntil(s.renews)}d`}
             style={{
               width: 38,
@@ -37,7 +36,7 @@ export default function UpcomingRenewals({ t, upcomingSorted, selectedRenewal, s
           <div className="text-[11.5px] mt-0.5" style={{ color: t.textMuted }}>{selectedRenewal.category} · {selectedRenewal.cycle}</div>
           <div className="flex items-center justify-between mt-2">
             <span className="text-[12px]" style={{ color: t.textMuted }}>Renews {selectedRenewal.renews}</span>
-            <span className="cs-num text-[13px] font-bold">{fmtMoney(monthlyNormalized(selectedRenewal))}</span>
+            <span className="text-[13px] font-bold">{fmtMoney(monthlyNormalized(selectedRenewal))}</span>
           </div>
         </div>
       ) : (

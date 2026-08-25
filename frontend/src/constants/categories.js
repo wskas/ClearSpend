@@ -1,5 +1,5 @@
-// Category -> color mapping. Order here defines stacking order in the
-// projection chart (first key renders at the bottom of each bar).
+// Fallback category -> color mapping, used when a category has no
+// hex_color_code from the backend (see lib/adapters.js categoryColor).
 export const CATEGORY_META = {
   Design: { color: "#7C6AE8" },
   Collaboration: { color: "#3457D5" },

@@ -41,7 +41,7 @@ export default function CategoriesPage({ t, categoryTotals, activeSubs }) {
 
       <button
         onClick={() => setEditing(null)}
-        className="cs-tap rounded-2xl p-5 flex flex-col items-center justify-center gap-2"
+        className="rounded-2xl p-5 flex flex-col items-center justify-center gap-2"
         style={{ background: t.card, border: `1px dashed ${t.border}`, boxShadow: t.shadow }}
       >
         <span

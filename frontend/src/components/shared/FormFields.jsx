@@ -78,7 +78,7 @@ export function ColorField({ t, label, name, formik }) {
           value={value}
           onChange={formik.handleChange}
           onBlur={formik.handleBlur}
-          className="flex-1 rounded-lg px-3 py-2 text-[13.5px] outline-none cs-num"
+          className="flex-1 rounded-lg px-3 py-2 text-[13.5px] outline-none"
           style={baseStyle(t, err)}
         />
       </div>
@@ -102,7 +102,7 @@ export function FormActions({ t, onCancel, submitting, submitLabel = "Save" }) {
       <button
         type="button"
         onClick={onCancel}
-        className="cs-tap rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+        className="rounded-lg px-3.5 py-2 text-[13px] font-semibold"
         style={{ border: `1px solid ${t.border}`, color: t.textMuted }}
       >
         Cancel
@@ -110,7 +110,7 @@ export function FormActions({ t, onCancel, submitting, submitLabel = "Save" }) {
       <button
         type="submit"
         disabled={submitting}
-        className="cs-tap rounded-lg px-4 py-2 text-[13px] font-semibold text-white"
+        className="rounded-lg px-4 py-2 text-[13px] font-semibold text-white"
         style={{ background: t.primary, opacity: submitting ? 0.6 : 1 }}
       >
         {submitting ? "Saving…" : submitLabel}

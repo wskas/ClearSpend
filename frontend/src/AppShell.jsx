@@ -7,7 +7,6 @@ import Header from "./components/layout/Header.jsx";
 import DashboardPage from "./components/dashboard/DashboardPage.jsx";
 import SubscriptionsPage from "./components/subscriptions/SubscriptionsPage.jsx";
 import CategoriesPage from "./components/categories/CategoriesPage.jsx";
-import EmptyState from "./components/shared/EmptyState.jsx";
 
 // The authenticated dashboard. Rendered behind RequireAuth by App.jsx.
 export default function AppShell() {
@@ -87,6 +86,7 @@ export default function AppShell() {
                     warnings={warnings}
                     filteredSubs={filteredSubs}
                     subsCount={activeSubs.length}
+                    setTab={setTab}
                   />
                 )}
 
@@ -102,10 +102,6 @@ export default function AppShell() {
 
                 {tab === "categories" && (
                   <CategoriesPage t={t} categoryTotals={categoryTotals} activeSubs={activeSubs} />
-                )}
-
-                {(tab === "analytics" || tab === "settings") && (
-                  <EmptyState t={t} tab={tab} onBack={() => setTab("dashboard")} />
                 )}
               </>
             )}

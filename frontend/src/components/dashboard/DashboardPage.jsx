@@ -29,6 +29,7 @@ export default function DashboardPage({
   warnings,
   filteredSubs,
   subsCount,
+  setTab,
 }) {
   const { data: categories = [] } = useCategories();
   const [adding, setAdding] = useState(false);
@@ -36,12 +37,12 @@ export default function DashboardPage({
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="cs-num text-[22px] font-bold">Welcome back{firstName ? `, ${firstName}` : ""} 👋</h2>
+        <h2 className="text-[22px] font-bold">Welcome back{firstName ? `, ${firstName}` : ""} 👋</h2>
         <div className="flex items-center gap-2">
-          <button className="cs-tap flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium" style={{ border: `1px solid ${t.border}`, color: t.textMuted }}>
+          <button className="flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium" style={{ border: `1px solid ${t.border}`, color: t.textMuted }}>
             Aug 24, 2026 <ChevronDown size={14} />
           </button>
-          <button className="cs-tap flex items-center gap-2 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white" style={{ background: t.primary }}>
+          <button className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white" style={{ background: t.primary }}>
             <Download size={14} /> Export
           </button>
         </div>
@@ -71,7 +72,13 @@ export default function DashboardPage({
       <Card t={t}>
         <div className="flex items-center justify-between mb-3">
           <div className="text-[14px] font-bold">Recent Subscriptions</div>
-          <span className="text-[12px] font-medium" style={{ color: t.primary }}>View all</span>
+          <button
+            onClick={() => setTab("subscriptions")}
+            className="text-[12px] font-medium"
+            style={{ color: t.primary }}
+          >
+            View all
+          </button>
         </div>
         <SubscriptionsTable t={t} subs={filteredSubs} compact />
       </Card>
