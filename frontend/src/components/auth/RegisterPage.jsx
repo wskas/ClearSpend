@@ -3,15 +3,14 @@ import { useNavigate, Link } from "react-router-dom";
 import { useFormik } from "formik";
 import api, { getErrorMessage } from "../../lib/api.js";
 import { setTokens } from "../../lib/auth.js";
+import { useCurrencies, FALLBACK_CURRENCIES } from "../../hooks/queries.js";
 import { AuthShell, TextInput, SelectInput, SubmitButton, FormError } from "./AuthShell.jsx";
-
-// Keep in sync with SUPPORTED_CURRENCIES in the backend's
-// fetch_exchange_rates management command.
-const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "CAD", "AUD", "SGD", "IDR", "HKD"];
 
 export default function RegisterPage() {
   const navigate = useNavigate();
   const [formError, setFormError] = useState("");
+  // Served by the backend; falls back to the built-in list if unreachable.
+  const { data: currencies } = useCurrencies();
 
   const formik = useFormik({
     initialValues: { email: "", username: "", password: "", base_currency: "USD" },
@@ -63,7 +62,7 @@ export default function RegisterPage() {
         <TextInput label="Email" name="email" type="email" formik={formik} autoComplete="email" />
         <TextInput label="Username" name="username" formik={formik} autoComplete="username" />
         <TextInput label="Password" name="password" type="password" formik={formik} autoComplete="new-password" />
-        <SelectInput label="Base currency" name="base_currency" formik={formik} options={CURRENCIES} />
+        <SelectInput label="Base currency" name="base_currency" formik={formik} options={currencies ?? FALLBACK_CURRENCIES} />
         <SubmitButton disabled={formik.isSubmitting}>
           {formik.isSubmitting ? "Creating account…" : "Sign up"}
         </SubmitButton>

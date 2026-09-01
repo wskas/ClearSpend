@@ -1,0 +1,99 @@
+# Production topology: single origin behind Caddy.
+#
+#   docker compose --env-file .env.prod up --build -d
+#
+# Note that `db`, `redis` and `web` deliberately declare no `ports:`. They are
+# reachable only on the compose network. For `web` this is a security
+# requirement, not a preference: TRUST_PROXY_SSL_HEADER=True makes Django
+# believe X-Forwarded-Proto, so a directly reachable gunicorn would let any
+# client claim https on a plaintext request -- turning SECURE_SSL_REDIRECT
+# into a no-op and writing Secure cookies over HTTP.
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-clearspend}
+      POSTGRES_USER: ${POSTGRES_USER:-clearspend}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env.prod}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clearspend} -d ${POSTGRES_DB:-clearspend}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    # Throttle counters and login-lockout counters only -- all of it is
+    # reconstructible, none of it is worth persisting. Disabling both
+    # persistence mechanisms avoids surprise disk writes and fork stalls.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  web:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env.prod
+    environment:
+      # Derived from the POSTGRES_* values above so there is one source of
+      # truth for the credentials rather than two that can drift apart.
+      DATABASE_URL: postgres://${POSTGRES_USER:-clearspend}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-clearspend}
+      REDIS_URL: redis://redis:6379/0
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # /api/currencies/ is AllowAny, so this needs no credentials. The two
+      # headers are both required: Host because ALLOWED_HOSTS does not include
+      # localhost, and X-Forwarded-Proto because SECURE_SSL_REDIRECT would
+      # otherwise answer with a 301 that proves nothing.
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null",
+             "-H", "Host: ${DOMAIN}",
+             "-H", "X-Forwarded-Proto: https",
+             "http://127.0.0.1:8000/api/currencies/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  proxy:
+    build:
+      context: ./frontend
+      args:
+        # Build-time only -- Vite inlines this. Changing it requires
+        # `up --build`, not just a restart.
+        VITE_API_BASE_URL: /api
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN must be set in .env.prod}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Config, not artifact: bind-mounted so the proxy can be reconfigured
+      # and reloaded without rebuilding the SPA bundle.
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and ACME account state. Losing this volume means
+      # re-issuing certificates, which is rate-limited by Let's Encrypt.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

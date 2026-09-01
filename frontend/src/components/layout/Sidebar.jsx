@@ -1,14 +1,25 @@
+import { useState } from "react";
 import { Moon, Sun, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { NAV } from "../../constants/nav.js";
-import { clearTokens } from "../../lib/auth.js";
+import { logout } from "../../lib/api.js";
 
 export default function Sidebar({ t, dark, setDark, tab, setTab }) {
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    clearTokens();
-    navigate("/login", { replace: true });
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  // Revokes the refresh token server-side before clearing it locally.
+  // Without the server call, "log out" only forgets the token here -- the
+  // token itself stays valid until it expires, which is the wrong outcome on
+  // a shared or compromised machine.
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await logout();
+    } finally {
+      navigate("/login", { replace: true });
+    }
   };
 
   return (
@@ -53,11 +64,12 @@ export default function Sidebar({ t, dark, setDark, tab, setTab }) {
         <div className="px-3 pt-3">
           <button
             onClick={handleLogout}
+            disabled={loggingOut}
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13.5px] font-medium text-left w-full"
             style={{ color: t.textMuted }}
           >
             <LogOut size={17} strokeWidth={2} />
-            Log out
+            {loggingOut ? "Logging out…" : "Log out"}
           </button>
         </div>
 

@@ -3,10 +3,9 @@ import { useFormik } from "formik";
 import Modal from "../shared/Modal.jsx";
 import { Field, Select, FormBanner, FormActions } from "../shared/FormFields.jsx";
 import { useCreateSubscription, useUpdateSubscription } from "../../hooks/mutations.js";
+import { useCurrencies, FALLBACK_CURRENCIES } from "../../hooks/queries.js";
 import { getErrorMessage, getFieldErrors } from "../../lib/api.js";
 
-// Keep in sync with SUPPORTED_CURRENCIES in the backend command.
-const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "CAD", "AUD", "SGD", "IDR", "HKD"];
 const CYCLES = [
   ["monthly", "Monthly"],
   ["yearly", "Yearly"],
@@ -18,6 +17,7 @@ export default function SubscriptionForm({ t, subscription, categories, onClose 
   const createM = useCreateSubscription();
   const updateM = useUpdateSubscription();
   const [formError, setFormError] = useState("");
+  const { data: currencies } = useCurrencies();
 
   const formik = useFormik({
     initialValues: {
@@ -78,7 +78,9 @@ export default function SubscriptionForm({ t, subscription, categories, onClose 
         <div className="grid grid-cols-2 gap-3">
           <Field t={t} label="Amount" name="amount" type="number" step="0.01" min="0" formik={formik} />
           <Select t={t} label="Currency" name="original_currency" formik={formik}>
-            {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            {(currencies ?? FALLBACK_CURRENCIES).map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
           </Select>
         </div>
 

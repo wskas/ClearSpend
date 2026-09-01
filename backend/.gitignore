@@ -21,8 +21,6 @@ secrets.json
 /media/
 /staticfiles/
 
-/subscriptions/migrations/*
-
 # OS files
 .DS_Store
 Thumbs.db

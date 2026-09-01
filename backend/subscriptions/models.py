@@ -2,6 +2,7 @@ import math
 from datetime import date, timedelta
 
 from django.db import models
+from django.db.models import F
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import MinValueValidator
 from decimal import Decimal
@@ -11,11 +12,28 @@ class User(AbstractUser):
     email = models.EmailField(unique=True)
     base_currency = models.CharField(max_length=3, default='USD')
 
+    # Stamped into every issued token and re-checked on every authenticated
+    # request. Bumping it invalidates all outstanding tokens for this user
+    # instantly -- access *and* refresh. The token blacklist alone cannot do
+    # this: it is only ever consulted for refresh tokens, so a stolen access
+    # token stays valid for its full lifetime after a logout.
+    # Bump via User.revoke_tokens(); see views.LogoutAllView.
+    token_version = models.PositiveIntegerField(default=0)
+
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
 
     def __str__(self):
         return self.email
+
+    def revoke_tokens(self):
+        """
+        Invalidate every token ever issued to this user. Use on "log out
+        everywhere", on password change, and on suspected compromise.
+        """
+        User.objects.filter(pk=self.pk).update(token_version=F('token_version') + 1)
+        self.refresh_from_db(fields=['token_version'])
+        return self.token_version
 
 class Category(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='categories')
@@ -84,16 +102,30 @@ class Subscription(models.Model):
         if self.start_date >= today:
             return self.start_date
 
+        # Both branches below compute the period count arithmetically rather
+        # than looping. The loops they replace cost one relativedelta addition
+        # per elapsed period, and this method is a SerializerMethodField
+        # evaluated for every row of every list page -- so a single row with a
+        # far-past start_date made listing arbitrarily expensive. Validation
+        # bounds new rows, but only this makes already-stored rows safe.
+        #
+        # Anchoring each step to start_date also fixes a drift bug. Adding one
+        # month at a time compounded end-of-month clamping: Jan 31 became
+        # Feb 28 and then stayed on the 28th forever. Anchored, the sequence is
+        # Jan 31 -> Feb 28 -> Mar 31, which is how billing on the 31st behaves.
         if self.billing_cycle == 'monthly':
-            next_date = self.start_date
-            while next_date < today:
-                next_date += relativedelta(months=1)
+            elapsed = ((today.year - self.start_date.year) * 12
+                       + today.month - self.start_date.month)
+            next_date = self.start_date + relativedelta(months=elapsed)
+            if next_date < today:
+                next_date = self.start_date + relativedelta(months=elapsed + 1)
             return next_date
 
         if self.billing_cycle == 'yearly':
-            next_date = self.start_date
-            while next_date < today:
-                next_date += relativedelta(years=1)
+            elapsed = today.year - self.start_date.year
+            next_date = self.start_date + relativedelta(years=elapsed)
+            if next_date < today:
+                next_date = self.start_date + relativedelta(years=elapsed + 1)
             return next_date
 
         if self.billing_cycle == 'custom' and self.custom_interval_days:
@@ -111,3 +143,24 @@ class ExchangeRate(models.Model):
 
     def __str__(self):
         return f"{self.currency_pair}: {self.rate}"
+
+class RevokedRefreshToken(models.Model):
+    """
+    Refresh tokens revoked by an explicit logout, as opposed to ones
+    blacklisted as a side effect of rotation.
+
+    The distinction matters because of the rotation grace window (see
+    tokens.VersionedRefreshToken.check_blacklist). That window exists to stop
+    two tabs refreshing in the same instant from knocking each other out --
+    but applied indiscriminately it would also give a just-logged-out token
+    a few more seconds of life, which is precisely the wrong answer for the
+    one operation whose entire purpose is immediate revocation.
+
+    Rows here are read only on the refresh path and can be pruned alongside
+    `manage.py flushexpiredtokens`.
+    """
+    jti = models.CharField(max_length=255, unique=True, db_index=True)
+    revoked_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'{self.jti} revoked at {self.revoked_at}'

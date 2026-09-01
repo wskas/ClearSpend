@@ -1,6 +1,50 @@
-djangorestframework
-djangorestframework-simplejwt
-django-cors-headers
-python-dateutil
-requests
-python-dotenv
+# Pinned deliberately. `pip freeze > requirements.txt` is the wrong tool for
+# this file: it snapshots whatever happens to be installed (possibly already
+# vulnerable), flattens transitive dependencies into the direct list, and
+# emits no hashes -- so it does nothing about the compromised-release
+# scenario it is usually reached for.
+#
+# Next step for supply-chain hardening: move these to requirements.in and
+# generate a fully-pinned, hashed lock with
+#   uv pip compile requirements.in --generate-hashes -o requirements.txt
+# then run `pip-audit` in CI rather than relying on Dependabot alone.
+
+# Django 5.2 is the current LTS line.
+Django==5.2.17
+djangorestframework==3.18.0
+djangorestframework-simplejwt==5.5.1
+django-cors-headers==4.9.0
+
+# Content-Security-Policy headers for admin/browsable-API responses.
+django-csp==4.0
+
+# Makes DATABASE_URL actually take effect (settings previously hardcoded
+# SQLite while .env.example advertised the knob).
+dj-database-url==3.1.2
+
+# PostgreSQL driver. Only needed when DATABASE_URL points at Postgres;
+# harmless otherwise. Swap for `psycopg2` (source build) in production images
+# if you prefer to compile against the system libpq.
+psycopg2-binary==2.9.12
+
+python-dateutil==2.9.0.post0
+requests==2.34.2
+python-dotenv==1.2.3
+
+# --- Production serving ---------------------------------------------------
+
+# WSGI server. `manage.py runserver` is a development server and is not
+# safe or performant to expose; config.wsgi:application is the entrypoint.
+gunicorn==26.2.0
+
+# Serves STATIC_ROOT from the app process. Django refuses to serve static
+# files when DEBUG is False, so without this /admin/ renders unstyled even
+# after collectstatic has run.
+whitenoise==6.12.0
+
+# Required by django.core.cache.backends.redis.RedisCache, which settings.py
+# selects whenever REDIS_URL is set -- previously absent, so setting that
+# variable raised ImportError at startup. Not optional in a multi-worker
+# deploy: LocMemCache is per-process, which would enforce both the throttle
+# counters and the per-account login lockout once per worker.
+redis==8.1.0
