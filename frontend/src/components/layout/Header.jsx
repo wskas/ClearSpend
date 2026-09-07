@@ -35,13 +35,13 @@ export default function Header({ t, tab, search, setSearch, searchOpen, setSearc
             <Search size={15} style={{ color: t.textMuted }} />
           </button>
         )}
-        <button
+        {/* <button
           className="relative flex items-center justify-center rounded-lg"
           style={{ width: 34, height: 34, border: `1px solid ${t.border}` }}
         >
           <Bell size={15} style={{ color: t.textMuted }} />
           <span className="absolute rounded-full" style={{ width: 7, height: 7, top: 7, right: 8, background: t.red }} />
-        </button>
+        </button> */}
         <div className="flex items-center gap-2 pl-2" style={{ borderLeft: `1px solid ${t.border}` }}>
           <div
             className="rounded-full flex items-center justify-center font-bold text-[11px]"
