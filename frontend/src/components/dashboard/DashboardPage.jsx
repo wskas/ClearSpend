@@ -38,14 +38,14 @@ export default function DashboardPage({
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-[22px] font-bold">Welcome back{firstName ? `, ${firstName}` : ""} 👋</h2>
-        <div className="flex items-center gap-2">
+        {/* <div className="flex items-center gap-2">
           <button className="flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium" style={{ border: `1px solid ${t.border}`, color: t.textMuted }}>
             Aug 24, 2026 <ChevronDown size={14} />
           </button>
           <button className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white" style={{ background: t.primary }}>
             <Download size={14} /> Export
           </button>
-        </div>
+        </div> */}
       </div>
 
       <FxWarningBanner t={t} warnings={warnings} show={showFxBanner} onDismiss={() => setShowFxBanner(false)} />
