@@ -1,4 +1,5 @@
 import { THEME } from "../../theme/token.js";
+import Logo from "../shared/Logo.jsx";
 
 // Auth pages use the light theme — the dashboard's dark-mode toggle lives
 // inside AppShell, which isn't mounted until after login.
@@ -12,12 +13,7 @@ export function AuthShell({ title, subtitle, children, footer }) {
     >
       <div className="w-full" style={{ maxWidth: 380 }}>
         <div className="flex items-center gap-2 justify-center mb-6">
-          <div
-            className="flex items-center justify-center rounded-lg"
-            style={{ width: 30, height: 30, background: t.primary, color: "#fff", fontWeight: 800, fontSize: 14 }}
-          >
-            C
-          </div>
+          <Logo size={30} />
           <span className="font-bold text-[15px]">ClearSpend</span>
         </div>
 

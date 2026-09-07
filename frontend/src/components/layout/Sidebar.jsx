@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Moon, Sun, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { NAV } from "../../constants/nav.js";
+import Logo from "../shared/Logo.jsx";
 import { logout } from "../../lib/api.js";
 
 export default function Sidebar({ t, dark, setDark, tab, setTab }) {
@@ -29,12 +30,7 @@ export default function Sidebar({ t, dark, setDark, tab, setTab }) {
     >
       <div>
         <div className="flex items-center gap-2 px-5 pt-6 pb-2">
-          <div
-            className="flex items-center justify-center rounded-lg"
-            style={{ width: 30, height: 30, background: t.primary, color: "#fff", fontWeight: 800, fontSize: 14 }}
-          >
-            C
-          </div>
+          <Logo size={30} />
           <span className="font-bold text-[15px]">ClearSpend</span>
         </div>
 
