@@ -1,9 +1,21 @@
-import { Search, Bell, X } from "lucide-react";
+import { Search, Bell, X, Menu } from "lucide-react";
 
-export default function Header({ t, tab, search, setSearch, searchOpen, setSearchOpen, name, initials }) {
+export default function Header({ t, tab, search, setSearch, searchOpen, setSearchOpen, name, initials, onOpenMenu }) {
   return (
     <header className="flex items-center justify-between px-6 py-4" style={{ borderBottom: `1px solid ${t.border}` }}>
-      <h1 className="text-[17px] font-bold capitalize">{tab}</h1>
+      <div className="flex items-center gap-3 min-w-0">
+        {/* The sidebar is hidden below `md`, so this is the only way into the
+            other tabs on a phone. */}
+        <button
+          onClick={onOpenMenu}
+          aria-label="Open menu"
+          className="md:hidden flex items-center justify-center rounded-lg shrink-0"
+          style={{ width: 34, height: 34, border: `1px solid ${t.border}` }}
+        >
+          <Menu size={16} style={{ color: t.textMuted }} />
+        </button>
+        <h1 className="text-[17px] font-bold capitalize truncate">{tab}</h1>
+      </div>
       <div className="flex items-center gap-3">
         {searchOpen ? (
           <div

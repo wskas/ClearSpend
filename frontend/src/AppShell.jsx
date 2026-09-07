@@ -3,6 +3,7 @@ import { THEME } from "./theme/token.js";
 import { useDashboardData } from "./hooks/useDashboardData.js";
 import { useProfile } from "./hooks/queries.js";
 import Sidebar from "./components/layout/Sidebar.jsx";
+import MobileNav from "./components/layout/MobileNav.jsx";
 import Header from "./components/layout/Header.jsx";
 import DashboardPage from "./components/dashboard/DashboardPage.jsx";
 import SubscriptionsPage from "./components/subscriptions/SubscriptionsPage.jsx";
@@ -14,6 +15,7 @@ export default function AppShell() {
   // convention as the auth tokens in src/lib/auth.js).
   const [dark, setDark] = useState(() => localStorage.getItem("clearspend_theme") === "dark");
   const [tab, setTab] = useState("dashboard");
+  const [navOpen, setNavOpen] = useState(false);
   const [horizon, setHorizon] = useState(6);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -53,9 +55,18 @@ export default function AppShell() {
     <div style={{ background: t.bg, color: t.text, fontFamily: "'Inter', sans-serif", minHeight: "100vh" }}>
       <div className="flex" style={{ minHeight: "100vh" }}>
         <Sidebar t={t} dark={dark} setDark={setDark} tab={tab} setTab={setTab} />
+        <MobileNav
+          t={t}
+          dark={dark}
+          setDark={setDark}
+          tab={tab}
+          setTab={setTab}
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
+        />
 
         <div className="flex-1 min-w-0">
-          <Header t={t} tab={tab} search={search} setSearch={setSearch} searchOpen={searchOpen} setSearchOpen={setSearchOpen} name={displayName} initials={userInitials} />
+          <Header t={t} tab={tab} search={search} setSearch={setSearch} searchOpen={searchOpen} setSearchOpen={setSearchOpen} name={displayName} initials={userInitials} onOpenMenu={() => setNavOpen(true)} />
 
           <main className="p-6">
             {isLoading ? (
