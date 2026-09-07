@@ -200,25 +200,25 @@ AUTH_PASSWORD_VALIDATORS = [
 # before any multi-worker deploy.
 REDIS_URL = os.environ.get('REDIS_URL', '').strip()
 if REDIS_URL:
-    _redis_options = {
-        # A Redis outage should degrade throttling, not 500 every
-        # request in the API.
-        'IGNORE_EXCEPTIONS': True,
-    }
+    # A Redis outage should degrade throttling, not 500 every request in the
+    # API. Django's built-in RedisCache has no option for that -- django-redis
+    # has IGNORE_EXCEPTIONS, but the built-in backend forwards unrecognised
+    # OPTIONS keys into redis.ConnectionPool.from_url(), which rejects them
+    # with a TypeError on first cache access. config.cache implements the
+    # behaviour instead; see the module docstring for the fail-open tradeoff.
+    _redis_backend = 'config.cache.ResilientRedisCache'
     CACHES = {
         'default': {
-            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'BACKEND': _redis_backend,
             'LOCATION': REDIS_URL,
-            'OPTIONS': _redis_options,
         },
         # Login lockout counters live in their own alias so throttle traffic
         # and lockout state can never evict one another. See the LocMem
         # branch below for why that matters.
         'lockout': {
-            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'BACKEND': _redis_backend,
             'LOCATION': REDIS_URL,
             'KEY_PREFIX': 'lockout',
-            'OPTIONS': _redis_options,
         },
     }
 else:

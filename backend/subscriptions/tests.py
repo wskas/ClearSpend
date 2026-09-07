@@ -710,6 +710,87 @@ class SettingsHardeningTests(TestCase):
         self.assertTrue(settings.EXCHANGE_RATE_API_BASE_URL.startswith('https://'))
 
 
+class ResilientRedisCacheTests(TestCase):
+    """
+    The Redis cache config that 500'd every /api/ request in production.
+
+    `IGNORE_EXCEPTIONS` is a django-redis option. Django's built-in RedisCache
+    forwards unrecognised OPTIONS into redis.ConnectionPool.from_url(), which
+    raises TypeError -- and because pool construction is lazy it did so on the
+    first cache access inside a request, not at startup. The process booted
+    clean and served 404s while everything reaching DRF's throttle 500'd.
+    """
+
+    # Port 1 on loopback refuses immediately: an unreachable Redis, no waiting.
+    UNREACHABLE = 'redis://127.0.0.1:1/0'
+
+    def _cache(self, **params):
+        from config.cache import ResilientRedisCache
+        return ResilientRedisCache(self.UNREACHABLE, params)
+
+    def test_unreachable_redis_degrades_to_a_miss(self):
+        """The regression: this raised instead of returning the default."""
+        cache_ = self._cache()
+        with self.assertLogs('config.cache', level='WARNING'):
+            self.assertEqual(cache_.get('any-key', 'fallback'), 'fallback')
+
+    def test_throttle_and_lockout_calls_survive_an_outage(self):
+        """Every method the throttle and login lockout actually reach."""
+        cache_ = self._cache()
+        with self.assertLogs('config.cache', level='WARNING'):
+            self.assertEqual(cache_.get('k', 0), 0)      # _login_failures
+            self.assertIs(cache_.add('k', 1, 60), False)  # _record_login_failure
+            self.assertIsNone(cache_.incr('k'))
+            self.assertIsNone(cache_.set('k', 1, 60))     # throttle history
+            self.assertIs(cache_.delete('k'), False)      # _clear_login_failures
+
+    def test_ignore_exceptions_option_does_not_reach_the_pool(self):
+        """
+        The exact production config. Left in OPTIONS it becomes
+        `TypeError: AbstractConnection.__init__() got an unexpected keyword
+        argument 'IGNORE_EXCEPTIONS'`.
+        """
+        cache_ = self._cache(OPTIONS={'IGNORE_EXCEPTIONS': True})
+        with self.assertLogs('config.cache', level='WARNING') as logs:
+            self.assertIsNone(cache_.get('any-key'))
+        self.assertNotIn('IGNORE_EXCEPTIONS', ''.join(logs.output))
+
+    def test_incr_value_error_is_not_swallowed(self):
+        """
+        incr() raises ValueError for a missing key and _record_login_failure
+        relies on it to restart an expired window. Only transport errors are
+        degraded; swallowing this would silently stop counting failures.
+        """
+        cache_ = self._cache()
+        with mock.patch(
+            'django.core.cache.backends.redis.RedisCache.incr',
+            side_effect=ValueError('Key not found'),
+        ):
+            with self.assertRaises(ValueError):
+                cache_.incr('k')
+
+    def test_settings_selects_the_resilient_backend_for_redis(self):
+        """Both aliases, or the lockout counter alone would still 500."""
+        import importlib
+        from config import settings as settings_module
+
+        with mock.patch.dict(os.environ, {'REDIS_URL': self.UNREACHABLE}):
+            reloaded = importlib.reload(settings_module)
+        try:
+            for alias in ('default', 'lockout'):
+                with self.subTest(alias=alias):
+                    self.assertEqual(
+                        reloaded.CACHES[alias]['BACKEND'],
+                        'config.cache.ResilientRedisCache',
+                    )
+                    self.assertNotIn(
+                        'IGNORE_EXCEPTIONS',
+                        reloaded.CACHES[alias].get('OPTIONS', {}),
+                    )
+        finally:
+            importlib.reload(settings_module)
+
+
 class FetchExchangeRatesTests(TestCase):
     """L3: the sync command's failure modes."""
 
