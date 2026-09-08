@@ -19,8 +19,10 @@ import tailwindcss from '@tailwindcss/vite'
  * A meta tag is used so the policy travels with the artifact and does not
  * depend on host configuration. If you deploy behind a CDN or proxy that can
  * set response headers, prefer the real header — a meta tag cannot express
- * `frame-ancestors` or `report-uri`. Set `frame-ancestors 'none'` there too;
- * until then X-Frame-Options from the host is the clickjacking control.
+ * `frame-ancestors`, `report-uri` or `sandbox`, and the browser logs a console
+ * warning for each one it has to ignore. `frame-ancestors 'none'` is therefore
+ * set on the host instead (`vercel.json`, alongside `X-Frame-Options: DENY`)
+ * and deliberately left out of the list below — keep it that way.
  */
 function cspPlugin(apiOrigin) {
   const directives = [
@@ -41,7 +43,9 @@ function cspPlugin(apiOrigin) {
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self'",
-    "frame-ancestors 'none'",
+    // No `frame-ancestors` here: it is ignored in a meta-delivered policy and
+    // only produces a console warning. Clickjacking is covered by the host's
+    // response headers (see vercel.json).
   ]
 
   // Only when the API is already on TLS: this directive rewrites http:// to
