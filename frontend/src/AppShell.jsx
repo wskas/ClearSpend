@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { THEME } from "./theme/token.js";
 import { useDashboardData } from "./hooks/useDashboardData.js";
 import { useProfile } from "./hooks/queries.js";
@@ -24,6 +24,12 @@ export default function AppShell() {
   const [statusFilter, setStatusFilter] = useState("active");
 
   const t = THEME[dark ? "dark" : "light"];
+
+  // Stable identities: MobileNav keys its Escape listener and scroll lock on
+  // `onClose`, so a fresh closure each render would tear those down and
+  // rebuild them on every unrelated state change.
+  const openNav = useCallback(() => setNavOpen(true), []);
+  const closeNav = useCallback(() => setNavOpen(false), []);
 
   useEffect(() => {
     localStorage.setItem("clearspend_theme", dark ? "dark" : "light");
@@ -62,11 +68,11 @@ export default function AppShell() {
           tab={tab}
           setTab={setTab}
           open={navOpen}
-          onClose={() => setNavOpen(false)}
+          onClose={closeNav}
         />
 
         <div className="flex-1 min-w-0">
-          <Header t={t} tab={tab} search={search} setSearch={setSearch} searchOpen={searchOpen} setSearchOpen={setSearchOpen} name={displayName} initials={userInitials} onOpenMenu={() => setNavOpen(true)} />
+          <Header t={t} tab={tab} search={search} setSearch={setSearch} searchOpen={searchOpen} setSearchOpen={setSearchOpen} name={displayName} initials={userInitials} onOpenMenu={openNav} />
 
           <main className="p-6">
             {isLoading ? (

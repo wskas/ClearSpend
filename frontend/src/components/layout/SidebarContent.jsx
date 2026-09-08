@@ -50,7 +50,11 @@ export default function SidebarContent({ t, dark, setDark, tab, setTab, onNaviga
                 }}
                 aria-current={isActive ? "page" : undefined}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13.5px] font-medium text-left"
-                style={{ background: isActive ? t.primary : "transparent", color: isActive ? "#fff" : t.textMuted }}
+                style={{
+                  background: isActive ? t.primary : "transparent",
+                  color: isActive ? "#fff" : t.textMuted,
+                  transition: "background .18s ease, color .18s ease",
+                }}
               >
                 <Icon size={17} strokeWidth={2} />
                 {item.label}
