@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { THEME } from "./theme/token.js";
 import { useDashboardData } from "./hooks/useDashboardData.js";
 import { useProfile } from "./hooks/queries.js";
+import { useDocumentTheme } from "./hooks/useDocumentTheme.js";
 import Sidebar from "./components/layout/Sidebar.jsx";
 import MobileNav from "./components/layout/MobileNav.jsx";
 import Header from "./components/layout/Header.jsx";
@@ -24,6 +25,9 @@ export default function AppShell() {
   const [statusFilter, setStatusFilter] = useState("active");
 
   const t = THEME[dark ? "dark" : "light"];
+
+  // Theme the document behind #root, not just our own subtree.
+  useDocumentTheme(t.bg, dark);
 
   // Stable identities: MobileNav keys its Escape listener and scroll lock on
   // `onClose`, so a fresh closure each render would tear those down and

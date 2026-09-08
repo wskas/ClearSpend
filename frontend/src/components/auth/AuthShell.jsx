@@ -1,4 +1,5 @@
 import { THEME } from "../../theme/token.js";
+import { useDocumentTheme } from "../../hooks/useDocumentTheme.js";
 import Logo from "../shared/Logo.jsx";
 
 // Auth pages use the light theme — the dashboard's dark-mode toggle lives
@@ -6,6 +7,10 @@ import Logo from "../shared/Logo.jsx";
 const t = THEME.light;
 
 export function AuthShell({ title, subtitle, children, footer }) {
+  // Reset the document back to light: logging out of dark mode unmounts
+  // AppShell but leaves its background on <html>.
+  useDocumentTheme(t.bg, false);
+
   return (
     <div
       className="flex items-center justify-center p-6"

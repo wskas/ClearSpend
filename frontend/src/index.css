@@ -1,1 +1,13 @@
 @import "tailwindcss";
+
+/* The themed background is painted by a React div inside #root, so the
+   document behind it stayed at the browser default. On mobile that shows:
+   overscroll rubber-banding at the top and bottom scrolls past #root and
+   reveals white. Paint <html>/<body> from the same token instead — the
+   variable is set by useDocumentTheme; the fallback is the light bg so the
+   first frame is correct before JS runs. */
+html,
+body {
+  min-height: 100%;
+  background-color: var(--app-bg, #F3F5FA);
+}
