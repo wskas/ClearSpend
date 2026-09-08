@@ -6,3 +6,7 @@ export function daysUntil(dateStr) {
 export function initials(name) {
   return name.slice(0, 2).toUpperCase();
 }
+
+export function currentMonthLabel(date = new Date()) {
+  return date.toLocaleString("en-US", { month: "short" });
+}

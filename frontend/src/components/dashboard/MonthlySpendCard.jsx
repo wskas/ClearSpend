@@ -3,6 +3,7 @@ import { Copy, Check, ArrowUpRight, Plus, RefreshCcw } from "lucide-react";
 import Card from "../shared/Card.jsx";
 import CardHeader from "../shared/CardHeader.jsx";
 import { fmtMoney, getBaseCurrency } from "../../utils/currency.js";
+import { currentMonthLabel } from "../../utils/dates.js";
 
 export default function MonthlySpendCard({ t, monthlyTotal, onAddSubscription }) {
   const [copied, setCopied] = useState(false);
@@ -10,7 +11,7 @@ export default function MonthlySpendCard({ t, monthlyTotal, onAddSubscription })
 
   return (
     <Card t={t}>
-      <CardHeader t={t} label="Monthly Spend" tooltip="Normalized to USD across all active subscriptions" pill="Aug" />
+      <CardHeader t={t} label="Monthly Spend" tooltip="Normalized to USD across all active subscriptions" pill={currentMonthLabel()} />
       <div className="text-[30px] font-extrabold mt-1">{fmtMoney(monthlyTotal)}</div>
       <div className="flex items-center gap-2 mt-2">
         <button

@@ -1,11 +1,12 @@
 import Card from "../shared/Card.jsx";
 import CardHeader from "../shared/CardHeader.jsx";
 import { fmtMoney } from "../../utils/currency.js";
+import { currentMonthLabel } from "../../utils/dates.js";
 
 export default function AvgCostCard({ t, monthlyTotal, subsCount, categoryTotals }) {
   return (
     <Card t={t}>
-      <CardHeader t={t} label="Avg. Cost / Subscription" tooltip="Monthly total divided by active subscriptions" pill="Aug" />
+      <CardHeader t={t} label="Avg. Cost / Subscription" tooltip="Monthly total divided by active subscriptions" pill={currentMonthLabel()} />
       <div className="text-[30px] font-extrabold mt-1">{fmtMoney(monthlyTotal / (subsCount || 1))}</div>
       <div className="mt-4 flex flex-col gap-2">
         {categoryTotals.slice(0, 3).map((c) => (
