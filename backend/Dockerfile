@@ -27,12 +27,14 @@ COPY . .
 # sleeps idle instances, anything in the entrypoint is paid again on every
 # cold start, and on a 0.1-CPU instance collectstatic is the slowest step.
 #
-# The throwaway SECRET_KEY is needed only to satisfy the import-time check:
-# settings requires a key whenever DEBUG is False, and DEBUG must be False
-# here for CompressedManifestStaticFilesStorage to be selected at all. It
-# signs nothing, is never read at runtime, and is overridden by the real
-# environment on boot.
-RUN SECRET_KEY=build-only-never-used-at-runtime DEBUG=False \
+# The throwaway values are needed only to satisfy import-time checks: settings
+# requires SECRET_KEY (>= 32 bytes, since it is also the JWT key fallback) and
+# AUTH_TRUSTED_ORIGINS whenever DEBUG is False, and DEBUG must be False here
+# for CompressedManifestStaticFilesStorage to be selected at all. They sign
+# and authorise nothing, are never read at runtime, and are overridden by the
+# real environment on boot -- which must set both for real.
+RUN SECRET_KEY=build-only-never-used-at-runtime-padding-to-50-chars DEBUG=False \
+    AUTH_TRUSTED_ORIGINS=https://build-only.invalid \
     python manage.py collectstatic --noinput
 
 # Run as a non-root user. Nothing in the app writes to the image at runtime.
