@@ -7,12 +7,13 @@ from dateutil.relativedelta import relativedelta
 from django.conf import settings
 from django.core.cache import caches
 from django.utils import timezone
+from django.utils.cache import add_never_cache_headers
 from rest_framework import generics, permissions, status, viewsets
-from rest_framework.exceptions import AuthenticationFailed, Throttled
+from rest_framework.exceptions import AuthenticationFailed, PermissionDenied, Throttled
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
-from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.token_blacklist.models import (
     BlacklistedToken,
@@ -104,7 +105,105 @@ def _clear_login_failures(email):
     _lockout_cache.delete(_lockout_key(email))
 
 
-class RegisterView(generics.CreateAPIView):
+# ---------------------------------------------------------------------------
+# Refresh-token cookie
+#
+# The refresh token travels as an HttpOnly cookie so page script can never
+# read it. While settings.REFRESH_TOKEN_IN_BODY is on (the transition), it is
+# *also* returned in JSON and accepted in the body, so the frontend that
+# predates the cookie keeps working across the deploy.
+# ---------------------------------------------------------------------------
+
+def _set_refresh_cookie(response, token):
+    response.set_cookie(
+        settings.REFRESH_COOKIE_NAME,
+        str(token),
+        max_age=int(settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
+        path=settings.REFRESH_COOKIE_PATH,
+        secure=settings.REFRESH_COOKIE_SECURE,
+        httponly=True,
+        samesite=settings.REFRESH_COOKIE_SAMESITE,
+    )
+
+
+def _delete_refresh_cookie(response):
+    response.delete_cookie(
+        settings.REFRESH_COOKIE_NAME,
+        path=settings.REFRESH_COOKIE_PATH,
+        samesite=settings.REFRESH_COOKIE_SAMESITE,
+    )
+
+
+def _presented_refresh_token(request):
+    """
+    Return (token, from_cookie).
+
+    An explicit body token wins over the cookie. It is not ambient -- a
+    cross-site page cannot know it -- so it needs no CSRF check, and
+    preferring it keeps the pre-cookie frontend working: that frontend never
+    sends X-Requested-With, yet its users *have* the cookie, since login sets
+    it for everyone. Preferring the cookie would 403 every one of them.
+    """
+    if settings.REFRESH_TOKEN_IN_BODY and hasattr(request.data, 'get'):
+        # A JSON array body makes request.data a list; .get would raise.
+        body = request.data.get('refresh')
+        if body:
+            return body, False
+    return request.COOKIES.get(settings.REFRESH_COOKIE_NAME), True
+
+
+def _require_xhr_header(request):
+    """
+    CSRF defence for requests authenticated by the cookie.
+
+    SameSite=Strict already keeps the cookie off cross-site requests; this
+    is the second layer. A foreign page cannot add a custom header without a
+    CORS preflight, and CORS never grants credentials here, so the preflight
+    cannot succeed. Without it, a forged POST to refresh would rotate the
+    victim's token -- a one-request session-destruction DoS.
+    """
+    if request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        raise PermissionDenied('Missing X-Requested-With header.')
+
+
+class AuthEndpointMixin:
+    """
+    Shared by every auth/ view.
+
+    - Origin check: browsers send Origin on every POST, so one from outside
+      AUTH_TRUSTED_ORIGINS is a foreign page. This is the only CSRF defence
+      login has (a forged login would plant the attacker's session in the
+      victim's browser). Requests without Origin are non-browser clients,
+      which carry no ambient credentials and are let through.
+    - no-store: these responses carry tokens and Set-Cookie. The frontend
+      proxy (Vercel) caches external rewrites by default when the origin's
+      headers allow it; a cached login response would hand one user's session
+      to the next visitor.
+    """
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        origin = request.headers.get('Origin')
+        if origin and origin not in settings.AUTH_TRUSTED_ORIGINS:
+            logger.warning('Auth request from untrusted origin %r rejected', origin)
+            raise PermissionDenied('Origin not allowed.')
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        add_never_cache_headers(response)
+        return response
+
+
+def _hand_out_refresh_token(response):
+    """Move a freshly issued refresh token into the cookie."""
+    refresh = response.data.get('refresh')
+    if refresh:
+        _set_refresh_cookie(response, refresh)
+        if not settings.REFRESH_TOKEN_IN_BODY:
+            del response.data['refresh']
+
+
+class RegisterView(AuthEndpointMixin, generics.CreateAPIView):
     """
     POST /api/auth/register/
 
@@ -126,7 +225,7 @@ class RegisterView(generics.CreateAPIView):
         return Response(UserProfileSerializer(user).data, status=status.HTTP_201_CREATED)
 
 
-class CustomTokenObtainPairView(TokenObtainPairView):
+class CustomTokenObtainPairView(AuthEndpointMixin, TokenObtainPairView):
     """
     POST /api/auth/token/  (login)
 
@@ -164,17 +263,44 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         if email:
             _clear_login_failures(email)
         logger.info('Login succeeded: %s', email)
+        _hand_out_refresh_token(response)
         return response
 
 
-class CustomTokenRefreshView(TokenRefreshView):
-    """POST /api/auth/token/refresh/"""
+class CustomTokenRefreshView(AuthEndpointMixin, TokenRefreshView):
+    """
+    POST /api/auth/token/refresh/
+
+    Reads the refresh token from the cookie (or, during the transition, the
+    body) and sets the rotated one back as the cookie.
+
+    A failed refresh deliberately does NOT clear the cookie. Two tabs share
+    it: if tab A rotates and tab B's stale presentation then fails (outside
+    the grace window), clearing here would delete the *new* cookie A was just
+    given and log out both -- the exact multi-tab regression the grace window
+    in tokens.py exists to prevent. A dead cookie expires on its own.
+    """
     serializer_class = ClearSpendTokenRefreshSerializer
     authentication_classes = []
     throttle_classes = [AnonRateThrottle]
 
+    def post(self, request, *args, **kwargs):
+        raw, from_cookie = _presented_refresh_token(request)
+        if from_cookie:
+            _require_xhr_header(request)
 
-class LogoutView(APIView):
+        serializer = self.get_serializer(data={'refresh': raw} if raw else {})
+        try:
+            serializer.is_valid(raise_exception=True)
+        except TokenError as e:
+            raise InvalidToken(e.args[0]) from e
+
+        response = Response(dict(serializer.validated_data), status=status.HTTP_200_OK)
+        _hand_out_refresh_token(response)
+        return response
+
+
+class LogoutView(AuthEndpointMixin, APIView):
     """
     POST /api/auth/logout/  -- blacklist one refresh token.
 
@@ -197,11 +323,17 @@ class LogoutView(APIView):
     throttle_classes = [AnonRateThrottle]
 
     def post(self, request):
-        raw = None
-        if hasattr(request.data, 'get'):
-            # A JSON array body makes request.data a list; .get would raise.
-            raw = request.data.get('refresh')
+        raw, from_cookie = _presented_refresh_token(request)
+        if raw and from_cookie:
+            _require_xhr_header(request)
 
+        response = self._revoke(raw)
+        # Always, including for a dead or missing token: the point of
+        # logging out is that the browser stops holding a session.
+        _delete_refresh_cookie(response)
+        return response
+
+    def _revoke(self, raw):
         if not raw:
             return Response(
                 {'detail': 'A refresh token is required.'},
@@ -234,7 +366,7 @@ class LogoutView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class LogoutAllView(APIView):
+class LogoutAllView(AuthEndpointMixin, APIView):
     """
     POST /api/auth/logout-all/  -- revoke every session for the caller.
 
@@ -261,7 +393,9 @@ class LogoutAllView(APIView):
             'All sessions revoked: user_id=%s token_version=%s',
             request.user.pk, version,
         )
-        return Response({'detail': 'All sessions revoked.'}, status=status.HTTP_200_OK)
+        response = Response({'detail': 'All sessions revoked.'}, status=status.HTTP_200_OK)
+        _delete_refresh_cookie(response)
+        return response
 
 
 # ---------------------------------------------------------------------------
@@ -335,6 +469,26 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
 # Reference data
 # ---------------------------------------------------------------------------
 
+# Header names (as Django's META keys) worth seeing when working out which
+# hop's address is the real client. Matched by substring so a platform header
+# we don't know about yet still shows up.
+_IP_HEADER_HINTS = ('FORWARD', 'IP', 'CF_', 'VERCEL', 'RENDER', 'VIA')
+
+
+def _log_client_ip_headers(request):
+    """Diagnostic only; gated by settings.LOG_CLIENT_IP_HEADERS."""
+    meta = request.META
+    headers = {
+        k: v for k, v in meta.items()
+        if k.startswith('HTTP_') and any(h in k for h in _IP_HEADER_HINTS)
+    }
+    logger.info(
+        'Client IP diagnostic: throttle_ident=%r REMOTE_ADDR=%r headers=%r',
+        AnonRateThrottle().get_ident(request), meta.get('REMOTE_ADDR'),
+        dict(sorted(headers.items())),
+    )
+
+
 class CurrenciesView(APIView):
     """
     GET /api/currencies/
@@ -352,6 +506,8 @@ class CurrenciesView(APIView):
     throttle_classes = [AnonRateThrottle]
 
     def get(self, request):
+        if settings.LOG_CLIENT_IP_HEADERS:
+            _log_client_ip_headers(request)
         return Response({
             'currencies': SUPPORTED_CURRENCIES,
             'base_currency': BASE_CURRENCY,

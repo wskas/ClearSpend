@@ -141,9 +141,10 @@ CORS_ALLOWED_ORIGINS = env_list('FRONTEND_ORIGIN')
 if not CORS_ALLOWED_ORIGINS and (DEBUG or RUNNING_TESTS):
     CORS_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://localhost:3000']
 
-# No ambient credentials are used (JWT travels in the Authorization header),
-# so the browser never needs to attach cookies cross-origin. Keeping this
-# False is what makes CSRF structurally inapplicable to the API.
+# The refresh-token cookie (below) is an ambient credential, but it is only
+# ever meant to travel same-origin -- the SPA reaches the API through a
+# same-site proxy. Keeping this False guarantees no *cross*-origin request can
+# ever carry it, whatever FRONTEND_ORIGIN says.
 CORS_ALLOW_CREDENTIALS = False
 
 ROOT_URLCONF = 'config.urls'
@@ -292,6 +293,13 @@ if not DEBUG:
 REST_FRAMEWORK['NUM_PROXIES'] = env_int('NUM_PROXIES', 0)
 NUM_PROXIES = REST_FRAMEWORK['NUM_PROXIES']
 
+# Diagnostic, off by default. When on, GET /api/currencies/ logs every
+# request header that could carry the client IP, alongside the identity DRF's
+# throttles currently derive, so the right NUM_PROXIES / trusted header can be
+# read off real traffic (see COOKIE_AUTH_PLAN.md, Phase 0). IPs are personal
+# data: switch it on, send a few requests, switch it off.
+LOG_CLIENT_IP_HEADERS = env_bool('LOG_CLIENT_IP_HEADERS', False)
+
 
 # ---------------------------------------------------------------------------
 # Simple JWT
@@ -304,8 +312,49 @@ NUM_PROXIES = REST_FRAMEWORK['NUM_PROXIES']
 # "invalidate every outstanding token" lever.
 JWT_SIGNING_KEY = os.environ.get('JWT_SIGNING_KEY') or SECRET_KEY
 
+# Retired signing keys, still accepted for *verification* only (new tokens are
+# always signed with JWT_SIGNING_KEY). To rotate without logging anyone out:
+# move the old key here, set a new JWT_SIGNING_KEY, and remove the old one
+# after REFRESH_TOKEN_HOURS. To log everyone out instead, rotate and leave
+# this empty. See subscriptions/tokens.py::RotatingKeyTokenBackend.
+JWT_PREVIOUS_SIGNING_KEYS = env_list('JWT_PREVIOUS_SIGNING_KEYS')
+
+# HS256 is only as strong as its key; a short one can be brute-forced
+# offline from any single captured token, after which an attacker can mint
+# tokens for every user. 32 bytes matches the hash output size (RFC 7518
+# 3.2). Enforced in production only, so the dev fallback key still boots.
+JWT_MIN_KEY_BYTES = 32
+
+
+def validate_jwt_key(name, key):
+    if len(key.encode()) < JWT_MIN_KEY_BYTES:
+        raise ImproperlyConfigured(
+            f'{name} must be at least {JWT_MIN_KEY_BYTES} bytes '
+            '(JWT_SIGNING_KEY falls back to SECRET_KEY when unset). '
+            'Generate one with get_random_secret_key().'
+        )
+
+
+if not (DEBUG or RUNNING_TESTS):
+    validate_jwt_key('JWT_SIGNING_KEY', JWT_SIGNING_KEY)
+    for _key in JWT_PREVIOUS_SIGNING_KEYS:
+        validate_jwt_key('JWT_PREVIOUS_SIGNING_KEYS', _key)
+
 SIMPLE_JWT = {
+    # Pinned rather than inherited from the library default, so an upgrade
+    # or a stray edit can't widen what verification accepts. Decoding passes
+    # exactly this one algorithm to PyJWT, which rejects `none` and any
+    # HS/RS confusion.
+    'ALGORITHM': 'HS256',
     'SIGNING_KEY': JWT_SIGNING_KEY,
+    # Stamped on every token and required on every decode. Cheap insurance
+    # against a token minted for some other service that happens to share
+    # a key (e.g. a copied .env) being accepted here.
+    'ISSUER': os.environ.get('JWT_ISSUER', 'clearspend'),
+    'AUDIENCE': os.environ.get('JWT_AUDIENCE', 'clearspend-api'),
+    # Verifies via RotatingKeyTokenBackend (overlapping keys) instead of
+    # SimpleJWT's single-key module-level backend.
+    'AUTH_TOKEN_CLASSES': ('subscriptions.tokens.VersionedAccessToken',),
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=env_int('ACCESS_TOKEN_MINUTES', 15)),
     # Sets the outer bound on every compromise window in the threat model:
     # a stolen refresh token is usable for this long. Tunable so it can be
@@ -323,6 +372,39 @@ SIMPLE_JWT = {
 # (lib/api.js); this is the server-side backstop for when that lock is
 # unavailable. Set to 0 to disable and get strict single-use semantics.
 REFRESH_REUSE_GRACE_SECONDS = env_int('REFRESH_REUSE_GRACE_SECONDS', 10)
+
+# Refresh token as an HttpOnly cookie (COOKIE_AUTH_PLAN.md, Phase 1).
+# HttpOnly keeps it out of reach of page script; SameSite=Strict keeps it off
+# cross-site requests; the path confines it to the endpoints that consume it
+# instead of riding along on every API call. No Domain attribute, so the
+# browser scopes it to the host it actually sees -- the frontend host, since
+# /api is reached through a same-site proxy rewrite.
+REFRESH_COOKIE_NAME = 'clearspend_refresh'
+REFRESH_COOKIE_PATH = '/api/auth/'
+REFRESH_COOKIE_SAMESITE = 'Strict'
+REFRESH_COOKIE_SECURE = env_bool('REFRESH_COOKIE_SECURE', not DEBUG)
+
+# Transition switch. While True, the refresh token is also returned in JSON
+# and accepted from the request body, so the frontend that predates the
+# cookie keeps working across the deploy. Turn off once the cookie-based
+# frontend has been live for REFRESH_TOKEN_HOURS (Phase 3).
+REFRESH_TOKEN_IN_BODY = env_bool('REFRESH_TOKEN_IN_BODY', True)
+
+# Browser origins allowed to call the auth endpoints, checked against the
+# Origin header. This is the login-CSRF defence (a cookie-setting endpoint a
+# foreign page could otherwise POST to) and a second layer on refresh/logout.
+# Separate from FRONTEND_ORIGIN, which stays blank on a same-origin deploy
+# because it drives CORS. Required in production: an empty list would reject
+# every browser login, so fail at boot rather than at the first user.
+AUTH_TRUSTED_ORIGINS = env_list('AUTH_TRUSTED_ORIGINS')
+if not AUTH_TRUSTED_ORIGINS:
+    if DEBUG or RUNNING_TESTS:
+        AUTH_TRUSTED_ORIGINS = ['http://localhost:5173', 'http://localhost:3000']
+    else:
+        raise ImproperlyConfigured(
+            'AUTH_TRUSTED_ORIGINS must be set when DEBUG is False -- the '
+            "SPA's public origin(s), e.g. https://clear-spend-swart.vercel.app"
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -6,6 +6,7 @@ from decimal import Decimal
 from io import StringIO
 from unittest import mock
 
+import jwt
 import requests
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -117,6 +118,25 @@ class CurrenciesEndpointTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data['currencies'], SUPPORTED_CURRENCIES)
         self.assertEqual(res.data['base_currency'], 'USD')
+
+    def test_client_ip_diagnostic_is_off_by_default(self):
+        with self.assertNoLogs('clearspend.security', level='INFO'):
+            APIClient().get(reverse('currencies'))
+
+    @override_settings(LOG_CLIENT_IP_HEADERS=True)
+    def test_client_ip_diagnostic_logs_forwarding_headers(self):
+        with self.assertLogs('clearspend.security', level='INFO') as logs:
+            APIClient().get(
+                reverse('currencies'),
+                HTTP_X_FORWARDED_FOR='203.0.113.7, 10.0.0.1',
+                HTTP_CF_CONNECTING_IP='203.0.113.7',
+                HTTP_USER_AGENT='not-logged',
+            )
+        line = logs.output[0]
+        self.assertIn('throttle_ident=', line)
+        self.assertIn("'HTTP_X_FORWARDED_FOR': '203.0.113.7, 10.0.0.1'", line)
+        self.assertIn("'HTTP_CF_CONNECTING_IP': '203.0.113.7'", line)
+        self.assertNotIn('not-logged', line)
 
 
 # ===========================================================================
@@ -386,6 +406,277 @@ class TokenVersionRevocationTests(AuthTestMixin, TestCase):
         client = APIClient()
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {tokens['access']}")
         self.assertEqual(client.get(reverse('profile')).status_code, 200)
+
+
+OLD_KEY = 'o' * 40
+NEW_KEY = 'n' * 40
+
+
+class TokenValidationTests(AuthTestMixin, TestCase):
+    """
+    JWT checklist: pinned algorithm, required iss/aud, and overlapping keys
+    so JWT_SIGNING_KEY rotation isn't forced to be a global logout.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.user = self.make_user()
+
+    def claims(self):
+        """A real, currently valid access-token payload to tamper with."""
+        access = self.login()['access']
+        return jwt.decode(access, options={'verify_signature': False})
+
+    def status_with(self, token):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        return client.get(reverse('profile')).status_code
+
+    def sign(self, payload, key=None, algorithm='HS256'):
+        return jwt.encode(payload, key or settings.SIMPLE_JWT['SIGNING_KEY'],
+                          algorithm=algorithm)
+
+    def test_issued_tokens_carry_issuer_and_audience(self):
+        claims = self.claims()
+        self.assertEqual(claims['iss'], settings.SIMPLE_JWT['ISSUER'])
+        self.assertEqual(claims['aud'], settings.SIMPLE_JWT['AUDIENCE'])
+
+    def test_control_resigned_token_is_accepted(self):
+        """Proves the tampering tests below fail for the stated reason."""
+        self.assertEqual(self.status_with(self.sign(self.claims())), 200)
+
+    def test_wrong_or_missing_audience_is_rejected(self):
+        claims = self.claims()
+        self.assertEqual(self.status_with(self.sign({**claims, 'aud': 'other-api'})), 401)
+        claims.pop('aud')
+        self.assertEqual(self.status_with(self.sign(claims)), 401)
+
+    def test_wrong_or_missing_issuer_is_rejected(self):
+        claims = self.claims()
+        self.assertEqual(self.status_with(self.sign({**claims, 'iss': 'evil'})), 401)
+        claims.pop('iss')
+        self.assertEqual(self.status_with(self.sign(claims)), 401)
+
+    def test_alg_none_is_rejected(self):
+        token = jwt.encode(self.claims(), None, algorithm='none')
+        self.assertEqual(self.status_with(token), 401)
+
+    def test_other_hmac_algorithm_is_rejected(self):
+        """Same key, different algorithm: the allowlist is exactly HS256."""
+        token = self.sign(self.claims(), algorithm='HS512')
+        self.assertEqual(self.status_with(token), 401)
+
+    def test_expired_token_is_rejected(self):
+        claims = {**self.claims(), 'exp': int(time.time()) - 60}
+        self.assertEqual(self.status_with(self.sign(claims)), 401)
+
+    def test_unknown_key_is_rejected(self):
+        self.assertEqual(self.status_with(self.sign(self.claims(), key='x' * 40)), 401)
+
+    def test_min_key_length_is_enforced(self):
+        from django.core.exceptions import ImproperlyConfigured
+        from config.settings import validate_jwt_key
+        with self.assertRaises(ImproperlyConfigured):
+            validate_jwt_key('JWT_SIGNING_KEY', 'short-key')
+        validate_jwt_key('JWT_SIGNING_KEY', 'k' * 32)
+
+
+class SigningKeyRotationTests(AuthTestMixin, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.user = self.make_user()
+
+    def jwt_settings(self, **overrides):
+        return override_settings(SIMPLE_JWT={**settings.SIMPLE_JWT, **overrides})
+
+    def test_token_signed_with_previous_key_survives_rotation(self):
+        with self.jwt_settings(SIGNING_KEY=OLD_KEY):
+            tokens = self.login()
+
+        with self.jwt_settings(SIGNING_KEY=NEW_KEY), \
+                override_settings(JWT_PREVIOUS_SIGNING_KEYS=[OLD_KEY]):
+            client = APIClient()
+            client.credentials(HTTP_AUTHORIZATION=f"Bearer {tokens['access']}")
+            self.assertEqual(client.get(reverse('profile')).status_code, 200)
+
+            res = APIClient().post(reverse('token_refresh'), {'refresh': tokens['refresh']})
+            self.assertEqual(res.status_code, 200, res.data)
+
+        # The refresh re-signed the session with the new key, so it outlives
+        # the old key being dropped entirely.
+        for token in (res.data['access'], res.data['refresh']):
+            jwt.decode(token, NEW_KEY, algorithms=['HS256'],
+                       audience=settings.SIMPLE_JWT['AUDIENCE'])
+        with self.jwt_settings(SIGNING_KEY=NEW_KEY):
+            client = APIClient()
+            client.credentials(HTTP_AUTHORIZATION=f"Bearer {res.data['access']}")
+            self.assertEqual(client.get(reverse('profile')).status_code, 200)
+
+    def test_rotation_without_previous_keys_is_a_global_logout(self):
+        with self.jwt_settings(SIGNING_KEY=OLD_KEY):
+            tokens = self.login()
+
+        with self.jwt_settings(SIGNING_KEY=NEW_KEY):
+            client = APIClient()
+            client.credentials(HTTP_AUTHORIZATION=f"Bearer {tokens['access']}")
+            self.assertEqual(client.get(reverse('profile')).status_code, 401)
+            res = APIClient().post(reverse('token_refresh'), {'refresh': tokens['refresh']})
+            self.assertEqual(res.status_code, 401)
+
+
+COOKIE = settings.REFRESH_COOKIE_NAME
+XHR = {'HTTP_X_REQUESTED_WITH': 'XMLHttpRequest'}
+
+
+class RefreshCookieTests(AuthTestMixin, TestCase):
+    """
+    COOKIE_AUTH_PLAN.md Phase 1: the refresh token as an HttpOnly cookie,
+    with CSRF defences on the endpoints that consume it.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.user = self.make_user()
+
+    def cookie_login(self, **extra):
+        """Log in on a client that keeps the cookie jar, like a browser."""
+        client = APIClient()
+        res = client.post(
+            reverse('token_obtain_pair'),
+            {'email': 'user@example.com', 'password': PASSWORD}, **extra,
+        )
+        self.assertEqual(res.status_code, 200, res.data)
+        return client, res
+
+    def test_login_sets_a_locked_down_cookie(self):
+        with override_settings(REFRESH_COOKIE_SECURE=True):
+            _, res = self.cookie_login()
+        cookie = res.cookies[COOKIE]
+        self.assertTrue(cookie['httponly'])
+        self.assertTrue(cookie['secure'])
+        self.assertEqual(cookie['samesite'], 'Strict')
+        self.assertEqual(cookie['path'], '/api/auth/')
+        self.assertEqual(
+            cookie['max-age'],
+            int(settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
+        )
+        self.assertNotIn('domain', {k for k, v in cookie.items() if v})
+        # Dual mode: the pre-cookie frontend still gets it in JSON.
+        self.assertEqual(res.data['refresh'], cookie.value)
+
+    def test_refresh_from_cookie_alone_rotates_it(self):
+        client, login = self.cookie_login()
+        old = login.cookies[COOKIE].value
+
+        res = client.post(reverse('token_refresh'), **XHR)
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertIn('access', res.data)
+        self.assertNotEqual(res.cookies[COOKIE].value, old)
+
+    @override_settings(REFRESH_REUSE_GRACE_SECONDS=0)
+    def test_rotated_cookie_cannot_be_replayed(self):
+        client, login = self.cookie_login()
+        old = login.cookies[COOKIE].value
+        client.post(reverse('token_refresh'), **XHR)
+
+        attacker = APIClient()
+        attacker.cookies[COOKIE] = old
+        self.assertEqual(attacker.post(reverse('token_refresh'), **XHR).status_code, 401)
+
+    def test_cookie_refresh_without_xhr_header_is_refused(self):
+        """The forged-POST DoS: a foreign page can't add the header."""
+        client, _ = self.cookie_login()
+        self.assertEqual(client.post(reverse('token_refresh')).status_code, 403)
+
+    def test_failed_refresh_does_not_clear_the_cookie(self):
+        """A stale tab's failure must not delete the peer tab's new cookie."""
+        client = APIClient()
+        client.cookies[COOKIE] = 'garbage'
+        res = client.post(reverse('token_refresh'), **XHR)
+        self.assertEqual(res.status_code, 401)
+        self.assertNotIn(COOKIE, res.cookies)
+
+    def test_body_token_wins_without_xhr_header(self):
+        """
+        The pre-cookie frontend: its users hold the cookie (login sets it
+        for everyone) but it never sends X-Requested-With. Preferring the
+        cookie would 403 all of them mid-deploy.
+        """
+        client, login = self.cookie_login()
+        res = client.post(reverse('token_refresh'), {'refresh': login.data['refresh']})
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertEqual(res.data['refresh'], res.cookies[COOKIE].value)
+
+    def test_foreign_origin_is_refused_on_login_and_refresh(self):
+        evil = {'HTTP_ORIGIN': 'https://evil.example'}
+        res = APIClient().post(
+            reverse('token_obtain_pair'),
+            {'email': 'user@example.com', 'password': PASSWORD}, **evil,
+        )
+        self.assertEqual(res.status_code, 403)
+        self.assertNotIn(COOKIE, res.cookies)
+
+        client, _ = self.cookie_login()
+        self.assertEqual(client.post(reverse('token_refresh'), **XHR, **evil).status_code, 403)
+
+    def test_trusted_origin_is_accepted(self):
+        self.cookie_login(HTTP_ORIGIN=settings.AUTH_TRUSTED_ORIGINS[0])
+
+    def test_logout_via_cookie_revokes_and_clears_it(self):
+        client, login = self.cookie_login()
+        old = login.cookies[COOKIE].value
+
+        res = client.post(reverse('logout'), **XHR)
+        self.assertEqual(res.status_code, 204)
+        self.assertEqual(res.cookies[COOKIE]['max-age'], 0)
+        self.assertEqual(res.cookies[COOKIE]['path'], '/api/auth/')
+
+        replay = APIClient()
+        replay.cookies[COOKIE] = old
+        self.assertEqual(replay.post(reverse('token_refresh'), **XHR).status_code, 401)
+
+    def test_cookie_logout_without_xhr_header_is_refused(self):
+        """Otherwise any site could log the user out with one forged POST."""
+        client, _ = self.cookie_login()
+        self.assertEqual(client.post(reverse('logout')).status_code, 403)
+
+    def test_logout_all_clears_the_cookie(self):
+        client, login = self.cookie_login()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
+        res = client.post(reverse('logout_all'))
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.cookies[COOKIE]['max-age'], 0)
+
+    def test_auth_responses_are_never_cached(self):
+        client, login = self.cookie_login()
+        responses = {
+            'login': login,
+            'refresh': client.post(reverse('token_refresh'), **XHR),
+            'failed login': APIClient().post(
+                reverse('token_obtain_pair'),
+                {'email': 'user@example.com', 'password': 'wrong'},
+            ),
+            'logout': client.post(reverse('logout'), **XHR),
+        }
+        for name, res in responses.items():
+            with self.subTest(name):
+                self.assertIn('no-store', res['Cache-Control'])
+
+    @override_settings(REFRESH_TOKEN_IN_BODY=False)
+    def test_cookie_only_mode(self):
+        """Phase 3: the refresh token never appears in JSON or the body."""
+        client, login = self.cookie_login()
+        self.assertNotIn('refresh', login.data)
+        self.assertIn(COOKIE, login.cookies)
+
+        res = client.post(reverse('token_refresh'), **XHR)
+        self.assertEqual(res.status_code, 200)
+        self.assertNotIn('refresh', res.data)
+
+        # A body token is ignored outright, so a stolen one is useless here.
+        stolen = res.cookies[COOKIE].value
+        res = APIClient().post(reverse('token_refresh'), {'refresh': stolen}, **XHR)
+        self.assertEqual(res.status_code, 400)
 
 
 class LoginHardeningTests(AuthTestMixin, TestCase):
