@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useFormik } from "formik";
 import api, { getErrorMessage } from "../../lib/api.js";
-import { setTokens } from "../../lib/auth.js";
+import { setAccessToken } from "../../lib/auth.js";
 import { useCurrencies, FALLBACK_CURRENCIES } from "../../hooks/queries.js";
 import { AuthShell, TextInput, SelectInput, SubmitButton, FormError } from "./AuthShell.jsx";
 
@@ -31,7 +31,7 @@ export default function RegisterPage() {
           email: values.email,
           password: values.password,
         });
-        setTokens({ access: res.data.access, refresh: res.data.refresh });
+        setAccessToken(res.data.access);
         navigate("/", { replace: true });
       } catch (err) {
         // Map DRF field errors (e.g. duplicate email, weak password) back

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useFormik } from "formik";
 import api, { getErrorMessage } from "../../lib/api.js";
-import { setTokens } from "../../lib/auth.js";
+import { setAccessToken } from "../../lib/auth.js";
 import { AuthShell, TextInput, SubmitButton, FormError } from "./AuthShell.jsx";
 
 export default function LoginPage() {
@@ -27,7 +27,9 @@ export default function LoginPage() {
         // USERNAME_FIELD is 'email', so SimpleJWT's token endpoint expects
         // { email, password }.
         const res = await api.post("/auth/token/", values);
-        setTokens({ access: res.data.access, refresh: res.data.refresh });
+        // The refresh token arrives as an HttpOnly cookie; only the access
+        // token is ours to hold, and only in memory.
+        setAccessToken(res.data.access);
         navigate(from, { replace: true });
       } catch (err) {
         setFormError(getErrorMessage(err, "Invalid email or password."));

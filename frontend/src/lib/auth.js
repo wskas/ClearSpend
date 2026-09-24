@@ -1,16 +1,28 @@
-// JWT token storage. localStorage for v1 — simple and survives reloads.
-// The axios client (api.js) reads/writes through these helpers; the auth
-// pages call setTokens() on login and clearTokens() on logout.
+// Session state. Nothing secret is persisted here:
 //
-// localStorage is shared by every tab on the origin, which is what makes the
-// cross-tab coordination below necessary: one tab clearing tokens logs the
-// others out too, and one tab rotating a refresh token invalidates the copy
-// the others are holding.
-const ACCESS_KEY = "clearspend_access";
-const REFRESH_KEY = "clearspend_refresh";
+//   - The refresh token lives in an HttpOnly cookie (`clearspend_refresh`,
+//     path /api/auth/) that this code can neither read nor write. The browser
+//     attaches it to the auth endpoints; the server rotates and clears it.
+//   - The access token lives only in this module's memory. It is lost on
+//     reload by design and re-minted from the cookie (see bootstrapSession in
+//     api.js). Injected script can still use it while the tab is open, but
+//     can no longer steal a credential that outlives the tab.
+//
+// Tabs don't share memory, so a freshly refreshed access token is handed to
+// peer tabs over a BroadcastChannel instead of through localStorage.
+let accessToken = null;
 
-// Tabs announce token changes here so peers can pick up a rotated token
-// instead of racing to rotate it themselves.
+// Non-secret hint that a session cookie probably exists. Lets a logged-out
+// visitor skip the startup refresh call, and tells a waiting tab that the
+// session has ended elsewhere. Shared across tabs via localStorage; it grants
+// nothing on its own -- the server only ever trusts the cookie.
+const SIGNED_IN_KEY = "clearspend_signed_in";
+
+// Where the pre-cookie build kept both tokens. Read once for migration, then
+// deleted (takeLegacyRefreshToken).
+const LEGACY_ACCESS_KEY = "clearspend_access";
+const LEGACY_REFRESH_KEY = "clearspend_refresh";
+
 export const TOKEN_CHANNEL = "clearspend_auth";
 export const TOKENS_UPDATED = "tokens-updated";
 export const TOKENS_CLEARED = "tokens-cleared";
@@ -26,43 +38,80 @@ function getChannel() {
   return channel;
 }
 
-export function broadcast(type) {
+export function broadcast(type, payload = {}) {
   const ch = getChannel();
-  if (ch) ch.postMessage({ type });
+  if (ch) ch.postMessage({ type, ...payload });
 }
 
 export function subscribe(handler) {
   const ch = getChannel();
   if (!ch) return () => {};
-  const listener = (event) => handler(event.data?.type);
+  const listener = (event) => handler(event.data?.type, event.data);
   ch.addEventListener("message", listener);
   return () => ch.removeEventListener("message", listener);
 }
 
+// localStorage can throw (private mode, blocked site data). The hint is an
+// optimisation, so failures degrade to "assume there may be a session".
+function readHint() {
+  try {
+    return localStorage.getItem(SIGNED_IN_KEY) === "1";
+  } catch {
+    return true;
+  }
+}
+
+function writeHint(signedIn) {
+  try {
+    if (signedIn) localStorage.setItem(SIGNED_IN_KEY, "1");
+    else localStorage.removeItem(SIGNED_IN_KEY);
+  } catch {
+    /* nothing useful to do */
+  }
+}
+
 export function getAccessToken() {
-  return localStorage.getItem(ACCESS_KEY);
+  return accessToken;
 }
 
-export function getRefreshToken() {
-  return localStorage.getItem(REFRESH_KEY);
+export function hasSessionHint() {
+  return readHint();
 }
 
-export function setTokens({ access, refresh }, { announce = true } = {}) {
-  if (access) localStorage.setItem(ACCESS_KEY, access);
-  if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
-  if (announce) broadcast(TOKENS_UPDATED);
+export function setAccessToken(token, { announce = true } = {}) {
+  accessToken = token;
+  writeHint(true);
+  // Peer tabs can't read this tab's memory; hand them the token directly.
+  // Anything able to listen on this channel is same-origin script, which
+  // could already call refresh itself, so this exposes nothing new.
+  if (announce) broadcast(TOKENS_UPDATED, { access: token });
 }
 
-export function clearTokens({ announce = true } = {}) {
-  localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+export function clearSession({ announce = true } = {}) {
+  accessToken = null;
+  writeHint(false);
   if (announce) broadcast(TOKENS_CLEARED);
 }
 
-export function isAuthenticated() {
-  // A refresh token is enough to render: an expired *access* token is the
-  // normal steady state, and the axios interceptor renews it transparently.
-  // Gating on access-token validity instead would bounce users to /login
-  // every time they returned to an idle tab.
-  return Boolean(getRefreshToken() || getAccessToken());
+/**
+ * One-time migration from the localStorage build: return the stored refresh
+ * token (if any) and delete both legacy keys, so no token survives in
+ * script-readable storage past this call.
+ */
+export function takeLegacyRefreshToken() {
+  try {
+    const refresh = localStorage.getItem(LEGACY_REFRESH_KEY);
+    localStorage.removeItem(LEGACY_REFRESH_KEY);
+    localStorage.removeItem(LEGACY_ACCESS_KEY);
+    return refresh;
+  } catch {
+    return null;
+  }
 }
+
+// Adopt tokens a peer tab refreshed, and drop ours when a peer logs out.
+// (A BroadcastChannel never delivers a message back to its sender.)
+subscribe((type, data) => {
+  if (type === TOKENS_UPDATED && data?.access) accessToken = data.access;
+  if (type === TOKENS_CLEARED) accessToken = null;
+});

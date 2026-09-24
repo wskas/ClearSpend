@@ -5,12 +5,10 @@ import tailwindcss from '@tailwindcss/vite'
 /**
  * Inject a Content-Security-Policy into the built index.html.
  *
- * This is the control that actually addresses the "one injected script
- * exfiltrates both tokens" threat. Moving tokens into HttpOnly cookies does
- * not: it requires a same-site deployment to be safe, and it re-introduces an
- * ambient credential (and with it CSRF) on the refresh endpoint. A CSP blocks
- * the exfiltration step regardless of where the tokens live, and blocks the
- * injection step for most XSS classes outright.
+ * The refresh token is now an HttpOnly cookie, so injected script can't read
+ * it; the CSP still matters for everything else. It blocks the injection step
+ * for most XSS classes outright, and blocks exfiltration of what script *can*
+ * still reach — the in-memory access token and the user's data.
  *
  * Build-only on purpose — the dev server needs inline and eval'd script for
  * HMR, so shipping one policy for both would either break `npm run dev` or
@@ -77,7 +75,7 @@ function cspPlugin(apiOrigin) {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, import.meta.dirname, '')
-  const apiBase = env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+  const apiBase = env.VITE_API_BASE_URL || '/api'
 
   let apiOrigin = ''
   try {
@@ -99,5 +97,16 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       cspPlugin(apiOrigin),
     ],
+    // Mirrors the production rewrite (vercel.json): the SPA and /api share an
+    // origin, so the SameSite=Strict refresh cookie is sent and no CORS is
+    // involved. Pointing VITE_API_BASE_URL at http://localhost:8000 directly
+    // instead makes every auth call cross-origin, and the cookie never
+    // travels. The browser's Origin header passes through untouched, which is
+    // what the backend's AUTH_TRUSTED_ORIGINS check sees.
+    server: {
+      proxy: {
+        '/api': env.DEV_API_PROXY_TARGET || 'http://localhost:8000',
+      },
+    },
   }
 })
